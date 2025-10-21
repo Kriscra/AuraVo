@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AuraVo Kayıtçı</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="branding">
+          <div class="logo-pulse"></div>
+          <div>
+            <h1>AuraVo</h1>
+            <span>Profesyonel Ses Kaydedici</span>
+          </div>
+        </div>
+        <div class="status-pill" id="statusPill">Hazır</div>
+      </header>
+
+      <main class="content">
+        <section class="control-card">
+          <div class="control-inner">
+            <div class="timer-display">
+              <span id="timer">00:00:00</span>
+              <small id="timerHint">Kaydı başlatmak için tıklayın</small>
+            </div>
+            <button id="recordButton" class="record-button">
+              <span class="button-glow"></span>
+              <span class="button-label">Kaydı Başlat</span>
+            </button>
+            <div class="meta-row">
+              <div class="meter" id="levelMeter">
+                <div class="meter-fill" id="meterFill"></div>
+              </div>
+              <button id="saveButton" class="ghost-button" disabled>
+                Kaydı Dışa Aktar
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="preview-card">
+          <h2>Son Kayıt</h2>
+          <p class="empty" id="emptyState">
+            Henüz kayıt alınmadı. Kaydı bitirdiğinizde burada önizleme görünecek.
+          </p>
+          <div class="preview-player hidden" id="preview">
+            <div class="preview-header">
+              <div>
+                <h3 id="recordingName">AuraVo-kayit.wav</h3>
+                <span id="recordingSize">0 KB</span>
+              </div>
+              <button id="discardButton" class="icon-button" title="Kaydı temizle">
+                ×
+              </button>
+            </div>
+            <audio id="audioPlayer" controls></audio>
+          </div>
+        </section>
+      </main>
+
+      <footer class="app-footer">
+        <span>EaseUS tarzı siyah ve mor temalı deneyim.</span>
+        <span id="errorMessage"></span>
+      </footer>
+    </div>
+    <script src="renderer.js"></script>
+  </body>
+</html>
