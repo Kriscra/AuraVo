@@ -8,6 +8,10 @@ const createWindow = () => {
     height: 620,
     backgroundColor: '#08070d',
     autoHideMenuBar: true,
+    frame: false,
+    resizable: false,
+    maximizable: false,
+    fullscreenable: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js')
     }
@@ -24,6 +28,24 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+});
+
+ipcMain.on('window-control', (event, action) => {
+  const targetWindow = BrowserWindow.fromWebContents(event.sender);
+  if (!targetWindow) {
+    return;
+  }
+
+  switch (action) {
+    case 'minimize':
+      targetWindow.minimize();
+      break;
+    case 'close':
+      targetWindow.close();
+      break;
+    default:
+      break;
+  }
 });
 
 app.on('window-all-closed', () => {

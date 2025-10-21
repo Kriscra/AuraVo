@@ -348,6 +348,22 @@ function setupEventListeners() {
     });
   }
 
+  if (ui.minimizeButton) {
+    ui.minimizeButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      window.electronAPI?.minimizeWindow?.();
+    });
+  }
+
+  if (ui.closeButton) {
+    ui.closeButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      window.electronAPI?.closeWindow?.();
+    });
+  }
+
   window.addEventListener('beforeunload', () => {
     if (recorder.isActive()) {
       recorder.cancel();

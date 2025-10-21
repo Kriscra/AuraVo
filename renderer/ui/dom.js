@@ -20,5 +20,7 @@ export const ui = {
   deviceSelect: byId('deviceSelect'),
   formatSelect: byId('formatSelect'),
   thresholdSlider: byId('thresholdSlider'),
-  thresholdValue: byId('thresholdValue')
+  thresholdValue: byId('thresholdValue'),
+  minimizeButton: byId('minimizeButton'),
+  closeButton: byId('closeButton')
 };
