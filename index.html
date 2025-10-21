@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AuraVo Kayıtçı</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <div class="title-bar">
+        <div class="title-drag">
+          <span class="title-text">AuraVo Kayıtçı</span>
+        </div>
+        <div class="window-controls">
+          <button id="minimizeButton" class="window-control" type="button" title="Simge Durumuna Küçült">
+            &minus;
+          </button>
+          <button id="closeButton" class="window-control close" type="button" title="Kapat">
+            &times;
+          </button>
+        </div>
+      </div>
+      <main class="workspace">
+        <section class="panel info-panel">
+          <div class="branding compact">
+            <div class="logo-pulse"></div>
+            <div class="branding-text">
+              <h1>AuraVo</h1>
+              <span>Profesyonel Ses Kaydedici</span>
+            </div>
+          </div>
+          <div class="status-stack">
+            <span class="status-label">Durum</span>
+            <div class="status-pill" id="statusPill">Hazır</div>
+          </div>
+          <div class="field-group">
+            <label class="field with-action">
+              <span class="field-label">Mikrofon</span>
+              <div class="field-row">
+                <select id="deviceSelect" class="field-control"></select>
+                <button id="refreshDevicesButton" class="ghost-button small" type="button">Yenile</button>
+              </div>
+            </label>
+            <label class="field">
+              <span class="field-label">Kayıt Formatı</span>
+              <select id="formatSelect" class="field-control"></select>
+            </label>
+            <label class="field slider">
+              <span class="field-label">Gürültü Eşiği</span>
+              <div class="slider-row">
+                <input
+                  type="range"
+                  id="thresholdSlider"
+                  min="-90"
+                  max="0"
+                  value="-50"
+                />
+                <span id="thresholdValue">-50 dB</span>
+              </div>
+              <small>Belirtilen desibel altındaki sesler yok sayılır.</small>
+            </label>
+            <label class="field slider">
+              <span class="field-label">Gürültü Bekletme</span>
+              <div class="slider-row">
+                <input
+                  type="range"
+                  id="gateHoldSlider"
+                  min="120"
+                  max="1000"
+                  step="20"
+                  value="280"
+                />
+                <span id="gateHoldValue">0.28 sn</span>
+              </div>
+              <small>Eşik altına inildiğinde kaydı duraklatmadan önce beklenecek süre.</small>
+            </label>
+          </div>
+        </section>
+
+        <section class="panel record-panel">
+          <div class="record-head">
+            <div class="timer-display">
+              <span id="timer">00:00:00</span>
+              <small id="timerHint">Kaydı başlatmak için tıklayın</small>
+            </div>
+            <div class="record-actions">
+              <button id="recordButton" class="record-button">
+                <span class="button-glow"></span>
+                <span class="button-label">Kaydı Başlat</span>
+              </button>
+              <button id="saveButton" class="ghost-button" disabled>
+                Seçili Kaydı Kaydet
+              </button>
+            </div>
+          </div>
+          <div class="meta-row">
+            <div class="meter" id="levelMeter" aria-label="Seviye göstergesi">
+              <div class="meter-fill" id="meterFill"></div>
+            </div>
+          </div>
+          <div class="waveform-shell">
+            <canvas id="waveformCanvas" width="480" height="120" aria-hidden="true"></canvas>
+          </div>
+          <div class="control-options">
+            <label class="option">
+              <input type="checkbox" id="countdownToggle" />
+              <span>Başlatırken geri sayım</span>
+              <select id="countdownSelect" class="option-select">
+                <option value="3" selected>3 sn</option>
+                <option value="5">5 sn</option>
+                <option value="10">10 sn</option>
+              </select>
+            </label>
+            <label class="option">
+              <input type="checkbox" id="autoTrimToggle" checked />
+              <span>Sessizlikleri otomatik kırp</span>
+            </label>
+          </div>
+          <div class="error-banner" id="errorMessage"></div>
+        </section>
+
+        <section class="panel preview-panel">
+          <div class="preview-section">
+            <div class="preview-header">
+              <h2>Seçili Kayıt</h2>
+            </div>
+            <p class="empty" id="emptyState">
+              Henüz kayıt alınmadı. Kaydı bitirdiğinizde burada önizleme görünecek.
+            </p>
+            <div class="preview-player hidden" id="preview">
+              <div class="preview-meta">
+                <div class="preview-titles">
+                  <h3 id="recordingName">AuraVo-kayit.wav</h3>
+                  <span id="recordingFormat">WAV</span>
+                </div>
+                <div class="preview-actions">
+                  <span class="favorite-badge" id="favoriteBadge" aria-hidden="true">★ Favori</span>
+                  <button id="favoriteButton" class="ghost-button small" type="button" disabled>
+                    Favoriye Ekle
+                  </button>
+                  <button id="renameButton" class="ghost-button small" type="button" disabled>
+                    Yeniden Adlandır
+                  </button>
+                  <button id="exportButton" class="ghost-button small" type="button" disabled>
+                    Hızlı Aktar
+                  </button>
+                  <button id="discardButton" class="icon-button" type="button" title="Kaydı kaldır" disabled>
+                    ×
+                  </button>
+                </div>
+              </div>
+              <div class="preview-stats">
+                <span id="recordingDuration">00:00</span>
+                <span id="recordingSize">0 KB</span>
+                <span id="recordingTimestamp"></span>
+              </div>
+              <audio id="audioPlayer" controls></audio>
+              <label class="note-field hidden" id="noteContainer">
+                <span>Notlar</span>
+                <textarea
+                  id="noteField"
+                  rows="3"
+                  placeholder="Bu kayıt hakkında not bırakın"
+                  disabled
+                ></textarea>
+              </label>
+            </div>
+          </div>
+          <div class="library-section">
+            <div class="library-header">
+              <h3>Kayıt Arşivi</h3>
+              <button id="clearLibraryButton" class="ghost-button small" type="button">
+                Tümünü Sil
+              </button>
+            </div>
+            <p class="empty hidden" id="libraryEmpty">
+              Henüz kayıt bulunmuyor. Yeni kayıtlar otomatik olarak burada listelenecek.
+            </p>
+            <ul id="libraryList" class="library-list"></ul>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="./renderer/index.js"></script>
+  </body>
+</html>
