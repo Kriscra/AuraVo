@@ -15,15 +15,21 @@ import {
   setTimerText,
   setTimerHint,
   setRecordButtonState,
+  setRecordButtonCountdown,
   setSaveEnabled,
   updateMeter,
   setThresholdDisplay,
+  setGateHoldDisplay,
   showPreview,
   clearPreview,
   setError,
   populateDeviceOptions,
-  populateFormatOptions
+  populateFormatOptions,
+  setFavoriteState,
+  renderLibrary
 } from './ui/presenter.js';
+import { RecordingLibrary } from './state/library.js';
+import { WaveformRenderer } from './ui/waveform.js';
 
 const TIMER_INTERVAL = 200;
 
@@ -32,10 +38,11 @@ let formats = [];
 let selectedDeviceId = null;
 let selectedFormat = null;
 let activeStream = null;
-let lastRecording = null;
-let lastPreviewUrl = null;
 let timerHandle = null;
 let timerStart = null;
+let countdownController = null;
+
+const waveformRenderer = ui.waveformCanvas ? new WaveformRenderer(ui.waveformCanvas) : null;
 
 const recorder = new AudioRecorder({
   onLevel: (decibels, gated) => {
@@ -56,13 +63,23 @@ const recorder = new AudioRecorder({
       default:
         break;
     }
+    updateAuxiliaryControls();
   },
   onError: (error) => {
     console.error(error);
     setError('Kayıt sırasında bir hata oluştu: ' + (error?.message || error));
     setStatus('Hata', 'error');
+  },
+  onWaveform: (frame, isActive) => {
+    waveformRenderer?.pushFrame(frame, isActive);
   }
 });
+
+const library = new RecordingLibrary({
+  onChange: handleLibraryChange
+});
+
+handleLibraryChange({ items: [], selected: null });
 
 function formatTimerValue(ms) {
   const totalSeconds = Math.floor(ms / 1000);
@@ -106,6 +123,24 @@ function formatSize(bytes) {
   return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
+function formatTimestamp(isoString) {
+  if (!isoString) {
+    return '';
+  }
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  const now = new Date();
+  const pad = (value) => value.toString().padStart(2, '0');
+  const isSameDay = date.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+  const dayPart = isSameDay ? 'Bugün' : isYesterday ? 'Dün' : `${pad(date.getDate())}.${pad(date.getMonth() + 1)}`;
+  return `${dayPart} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function generateFileName(extension) {
   const now = new Date();
   const pad = (value) => value.toString().padStart(2, '0');
@@ -131,19 +166,98 @@ function stopTimer() {
   setTimerHint('Yeni kayıt için tıklayın');
 }
 
-function resetPreview() {
-  if (lastPreviewUrl) {
-    URL.revokeObjectURL(lastPreviewUrl);
-    lastPreviewUrl = null;
+function isCountdownActive() {
+  return Boolean(countdownController);
+}
+
+function updateAuxiliaryControls() {
+  const busy = recorder.isActive() || isCountdownActive();
+  if (ui.countdownToggle) {
+    ui.countdownToggle.disabled = busy;
   }
-  lastRecording = null;
-  clearPreview();
-  setSaveEnabled(false);
+  if (ui.countdownSelect) {
+    const disabled = !ui.countdownToggle?.checked || busy;
+    ui.countdownSelect.disabled = disabled;
+  }
+  if (ui.autoTrimToggle) {
+    ui.autoTrimToggle.disabled = recorder.isActive();
+  }
 }
 
 function setRecordingControlsDisabled(disabled) {
   ui.deviceSelect.disabled = disabled || devices.length === 0;
   ui.formatSelect.disabled = disabled;
+  if (ui.refreshDevicesButton) {
+    ui.refreshDevicesButton.disabled = disabled;
+  }
+  updateAuxiliaryControls();
+}
+
+function cancelCountdown() {
+  if (countdownController) {
+    countdownController.abort();
+    countdownController = null;
+  }
+  setRecordButtonCountdown(null);
+  if (!recorder.isActive()) {
+    setStatus('Hazır');
+    setTimerHint('Kaydı başlatmak için tıklayın');
+    setRecordingControlsDisabled(false);
+  }
+  updateAuxiliaryControls();
+}
+
+function delay(ms, signal) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve(true);
+    }, ms);
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      if (signal) {
+        signal.removeEventListener('abort', onAbort);
+      }
+    };
+
+    const onAbort = () => {
+      cleanup();
+      resolve(false);
+    };
+
+    if (signal) {
+      if (signal.aborted) {
+        cleanup();
+        resolve(false);
+      } else {
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+    }
+  });
+}
+
+async function runCountdown(seconds) {
+  if (seconds <= 0) {
+    return true;
+  }
+  countdownController = new AbortController();
+  for (let remaining = seconds; remaining > 0; remaining -= 1) {
+    setRecordButtonCountdown(remaining);
+    setStatus(`Başlamaya ${remaining} saniye`, 'saving');
+    setTimerHint('Geri sayım sürüyor...');
+    const completed = await delay(1000, countdownController.signal);
+    if (!completed) {
+      countdownController = null;
+      setRecordButtonCountdown(null);
+      setStatus('Hazır');
+      setTimerHint('Kaydı başlatmak için tıklayın');
+      return false;
+    }
+  }
+  setRecordButtonCountdown(null);
+  countdownController = null;
+  return true;
 }
 
 async function refreshDevices() {
@@ -159,7 +273,6 @@ async function refreshDevices() {
       ui.deviceSelect.innerHTML = '';
       ui.deviceSelect.disabled = true;
       ui.recordButton.disabled = true;
-      resetPreview();
       return;
     }
 
@@ -193,16 +306,34 @@ function updateSelectedFormat(formatId) {
 }
 
 async function startRecording() {
+  if (recorder.isActive() || isCountdownActive()) {
+    return;
+  }
+
   setError('');
-  resetPreview();
+  setRecordingControlsDisabled(true);
+
+  const countdownSeconds = ui.countdownToggle?.checked
+    ? Number(ui.countdownSelect?.value || 0)
+    : 0;
+
+  if (countdownSeconds > 0) {
+    const proceed = await runCountdown(countdownSeconds);
+    if (!proceed) {
+      cancelCountdown();
+      return;
+    }
+  }
+
   try {
     setStatus('Mikrofon hazırlanıyor...', 'saving');
     setRecordButtonState(true);
-    setRecordingControlsDisabled(true);
-    recorder.setThreshold(Number(ui.thresholdSlider.value));
-
-    if (!selectedFormat) {
-      throw new Error('Geçerli bir kayıt formatı seçilemedi.');
+    waveformRenderer?.clear();
+    const threshold = Number(ui.thresholdSlider.value);
+    recorder.setThreshold(threshold);
+    const holdMs = Number(ui.gateHoldSlider?.value);
+    if (Number.isFinite(holdMs)) {
+      recorder.setGateHold(holdMs);
     }
 
     activeStream = await createAudioStream(selectedDeviceId);
@@ -223,6 +354,11 @@ async function startRecording() {
 }
 
 async function stopRecording() {
+  if (isCountdownActive()) {
+    cancelCountdown();
+    return;
+  }
+
   try {
     setRecordButtonState(false);
     setStatus('Kayıt işleniyor...', 'saving');
@@ -233,31 +369,27 @@ async function stopRecording() {
       return;
     }
 
-    const exportResult = await prepareExport(result.blob, selectedFormat);
-    const fileName = generateFileName(selectedFormat.extension);
+    const trimThreshold = Number(ui.thresholdSlider.value) - 5;
+    const exportResult = await prepareExport(result.blob, selectedFormat, {
+      trimSilence: Boolean(ui.autoTrimToggle?.checked),
+      trimThreshold: Number.isFinite(trimThreshold) ? trimThreshold : -55,
+      trimPaddingMs: 40
+    });
 
-    if (lastPreviewUrl) {
-      URL.revokeObjectURL(lastPreviewUrl);
-    }
+    const fileName = generateFileName(selectedFormat.extension);
     const url = URL.createObjectURL(exportResult.blob);
-    lastPreviewUrl = url;
-    lastRecording = {
+
+    library.add({
       blob: exportResult.blob,
       mimeType: exportResult.mimeType,
       extension: exportResult.extension,
       name: fileName,
       duration: exportResult.duration,
-      formatLabel: selectedFormat.label
-    };
-
-    showPreview({
-      url,
-      name: fileName,
-      sizeLabel: formatSize(exportResult.blob.size),
       formatLabel: selectedFormat.label,
-      durationLabel: formatDuration(exportResult.duration)
+      url,
+      size: exportResult.blob.size
     });
-    setSaveEnabled(true);
+
     setStatus('Hazır');
   } catch (error) {
     console.error(error);
@@ -269,11 +401,12 @@ async function stopRecording() {
     activeStream = null;
     setRecordingControlsDisabled(false);
     updateMeter(0, false);
+    waveformRenderer?.clear();
   }
 }
 
-async function saveRecording() {
-  if (!lastRecording) {
+async function saveRecording(entry = library.getSelected()) {
+  if (!entry) {
     return;
   }
 
@@ -282,16 +415,16 @@ async function saveRecording() {
   setError('');
 
   try {
-    const arrayBuffer = await lastRecording.blob.arrayBuffer();
+    const arrayBuffer = await entry.blob.arrayBuffer();
     if (!window.electronAPI?.saveAudio) {
       throw new Error('Electron kaydetme köprüsüne erişilemiyor.');
     }
 
     const result = await window.electronAPI.saveAudio({
       buffer: arrayBuffer,
-      extension: lastRecording.extension,
-      suggestedName: lastRecording.name,
-      mimeType: lastRecording.mimeType
+      extension: entry.extension,
+      suggestedName: entry.name,
+      mimeType: entry.mimeType
     });
 
     if (result?.success) {
@@ -306,12 +439,66 @@ async function saveRecording() {
     setError('Dosya kaydedilemedi: ' + (error?.message || error));
     setStatus('Hata', 'error');
   } finally {
-    setSaveEnabled(Boolean(lastRecording));
+    setSaveEnabled(Boolean(library.getSelected()));
+  }
+}
+
+function handleLibraryChange({ items, selected }) {
+  const list = items.map((item) => ({
+    id: item.id,
+    name: item.name,
+    durationLabel: formatDuration(item.duration),
+    sizeLabel: formatSize(item.size),
+    formatLabel: item.formatLabel,
+    timestampLabel: formatTimestamp(item.createdAt),
+    favorite: item.favorite,
+    active: selected?.id === item.id
+  }));
+
+  renderLibrary(list);
+
+  const hasSelection = Boolean(selected);
+  setSaveEnabled(hasSelection);
+  if (ui.favoriteButton) {
+    ui.favoriteButton.disabled = !hasSelection;
+  }
+  if (ui.renameButton) {
+    ui.renameButton.disabled = !hasSelection;
+  }
+  if (ui.exportButton) {
+    ui.exportButton.disabled = !hasSelection;
+  }
+  if (ui.discardButton) {
+    ui.discardButton.disabled = !hasSelection;
+  }
+  if (ui.noteField) {
+    ui.noteField.disabled = !hasSelection;
+  }
+
+  if (selected) {
+    showPreview({
+      url: selected.url,
+      name: selected.name,
+      sizeLabel: formatSize(selected.size),
+      formatLabel: selected.formatLabel,
+      durationLabel: formatDuration(selected.duration),
+      timestampLabel: formatTimestamp(selected.createdAt),
+      favorite: selected.favorite,
+      note: selected.note
+    });
+    setFavoriteState(selected.favorite);
+  } else {
+    clearPreview();
+    setFavoriteState(false);
   }
 }
 
 function setupEventListeners() {
   ui.recordButton.addEventListener('click', () => {
+    if (isCountdownActive()) {
+      cancelCountdown();
+      return;
+    }
     if (recorder.isActive()) {
       stopRecording();
     } else {
@@ -324,7 +511,7 @@ function setupEventListeners() {
   });
 
   ui.discardButton.addEventListener('click', () => {
-    resetPreview();
+    library.removeSelected();
     setStatus('Hazır');
   });
 
@@ -341,6 +528,120 @@ function setupEventListeners() {
     setThresholdDisplay(value);
     recorder.setThreshold(value);
   });
+
+  if (ui.gateHoldSlider) {
+    ui.gateHoldSlider.addEventListener('input', (event) => {
+      const value = Number(event.target.value);
+      setGateHoldDisplay(value);
+      recorder.setGateHold(value);
+    });
+  }
+
+  if (ui.refreshDevicesButton) {
+    ui.refreshDevicesButton.addEventListener('click', () => {
+      refreshDevices();
+    });
+  }
+
+  if (ui.countdownToggle) {
+    ui.countdownToggle.addEventListener('change', () => {
+      updateAuxiliaryControls();
+    });
+  }
+
+  if (ui.countdownSelect) {
+    ui.countdownSelect.addEventListener('change', () => {
+      updateAuxiliaryControls();
+    });
+  }
+
+  if (ui.autoTrimToggle) {
+    ui.autoTrimToggle.addEventListener('change', () => {
+      if (!recorder.isActive() && !isCountdownActive()) {
+        if (ui.autoTrimToggle.checked) {
+          setStatus('Sessizlik kırpma aktif', 'saving');
+          setTimeout(() => {
+            if (!recorder.isActive() && !isCountdownActive()) {
+              setStatus('Hazır');
+            }
+          }, 800);
+        } else {
+          setStatus('Hazır');
+        }
+      }
+    });
+  }
+
+  if (ui.libraryList) {
+    ui.libraryList.addEventListener('click', (event) => {
+      const item = event.target.closest('.library-item');
+      if (!item) {
+        return;
+      }
+      const { id } = item.dataset;
+      library.select(id);
+      if (event.detail >= 2) {
+        saveRecording();
+      }
+    });
+  }
+
+  if (ui.clearLibraryButton) {
+    ui.clearLibraryButton.addEventListener('click', () => {
+      if (library.isEmpty()) {
+        return;
+      }
+      const confirmed = window.confirm('Tüm kayıt geçmişini silmek istediğinize emin misiniz?');
+      if (confirmed) {
+        library.clear();
+        setStatus('Hazır');
+      }
+    });
+  }
+
+  if (ui.favoriteButton) {
+    ui.favoriteButton.addEventListener('click', () => {
+      const selected = library.getSelected();
+      if (!selected) {
+        return;
+      }
+      library.toggleFavorite(selected.id);
+    });
+  }
+
+  if (ui.renameButton) {
+    ui.renameButton.addEventListener('click', () => {
+      const selected = library.getSelected();
+      if (!selected) {
+        return;
+      }
+      const name = window.prompt('Kayıt adını düzenle', selected.name);
+      if (!name) {
+        return;
+      }
+      const trimmed = name.trim();
+      if (!trimmed || trimmed === selected.name) {
+        return;
+      }
+      library.update(selected.id, { name: trimmed });
+    });
+  }
+
+  if (ui.exportButton) {
+    ui.exportButton.addEventListener('click', () => {
+      saveRecording();
+    });
+  }
+
+  if (ui.noteField) {
+    ui.noteField.addEventListener('input', (event) => {
+      const selected = library.getSelected();
+      if (!selected) {
+        return;
+      }
+      library.update(selected.id, { note: event.target.value });
+    });
+  }
 
   if (navigator.mediaDevices?.addEventListener) {
     navigator.mediaDevices.addEventListener('devicechange', () => {
@@ -364,14 +665,43 @@ function setupEventListeners() {
     });
   }
 
+  window.addEventListener('keydown', (event) => {
+    if (event.repeat) {
+      return;
+    }
+    const target = event.target;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+      return;
+    }
+
+    if (event.code === 'Space') {
+      event.preventDefault();
+      if (recorder.isActive() || isCountdownActive()) {
+        stopRecording();
+      } else {
+        startRecording();
+      }
+    }
+
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+      event.preventDefault();
+      saveRecording();
+    }
+
+    if (event.key === 'Delete') {
+      event.preventDefault();
+      library.removeSelected();
+      setStatus('Hazır');
+    }
+  });
+
   window.addEventListener('beforeunload', () => {
     if (recorder.isActive()) {
       recorder.cancel();
     }
+    cancelCountdown();
     stopStream(activeStream);
-    if (lastPreviewUrl) {
-      URL.revokeObjectURL(lastPreviewUrl);
-    }
+    library.clear();
   });
 }
 
@@ -381,7 +711,13 @@ async function bootstrap() {
   setSaveEnabled(false);
   setThresholdDisplay(Number(ui.thresholdSlider.value));
   recorder.setThreshold(Number(ui.thresholdSlider.value));
+  if (ui.gateHoldSlider) {
+    setGateHoldDisplay(Number(ui.gateHoldSlider.value));
+    recorder.setGateHold(Number(ui.gateHoldSlider.value));
+  }
   updateMeter(0, false);
+  updateAuxiliaryControls();
+  waveformRenderer?.clear();
 
   try {
     await ensureAudioPermission();

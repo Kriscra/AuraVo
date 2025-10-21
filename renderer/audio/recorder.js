@@ -1,10 +1,11 @@
 import { computeDecibels } from './levels.js';
 
 export class AudioRecorder {
-  constructor({ onLevel, onStateChange, onError } = {}) {
+  constructor({ onLevel, onStateChange, onError, onWaveform } = {}) {
     this.onLevel = onLevel;
     this.onStateChange = onStateChange;
     this.onError = onError;
+    this.onWaveform = onWaveform;
 
     this.thresholdDb = -50;
     this.gateHoldMs = 280;
@@ -32,6 +33,12 @@ export class AudioRecorder {
   setThreshold(decibels) {
     this.thresholdDb = decibels;
     this.applyGate(this.lastDecibel, performance.now());
+  }
+
+  setGateHold(milliseconds) {
+    if (Number.isFinite(milliseconds) && milliseconds >= 0) {
+      this.gateHoldMs = milliseconds;
+    }
   }
 
   isActive() {
@@ -177,6 +184,11 @@ export class AudioRecorder {
 
       this.applyGate(decibels, timestamp);
       this.onLevel?.(decibels, this.isGateClosed);
+      if (this.onWaveform) {
+        const copy = Float32Array.from(this.levelBuffer);
+        const isActive = !this.isGateClosed && this.mediaRecorder?.state === 'recording';
+        this.onWaveform(copy, isActive);
+      }
 
       this.animationFrame = requestAnimationFrame(loop);
     };
