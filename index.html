@@ -28,93 +28,88 @@
           </button>
         </div>
       </div>
-      <header class="app-header">
-        <div class="branding">
-          <div class="logo-pulse"></div>
-          <div>
-            <h1>AuraVo</h1>
-            <span>Profesyonel Ses Kaydedici</span>
+      <main class="workspace">
+        <section class="panel info-panel">
+          <div class="branding compact">
+            <div class="logo-pulse"></div>
+            <div class="branding-text">
+              <h1>AuraVo</h1>
+              <span>Profesyonel Ses Kaydedici</span>
+            </div>
           </div>
-        </div>
-        <div class="status-pill" id="statusPill">Hazır</div>
-      </header>
-
-      <main class="content">
-        <section class="control-card">
-          <div class="control-inner">
-            <div class="recording-overview">
-              <div class="timer-display">
-                <span id="timer">00:00:00</span>
-                <small id="timerHint">Kaydı başlatmak için tıklayın</small>
+          <div class="status-stack">
+            <span class="status-label">Durum</span>
+            <div class="status-pill" id="statusPill">Hazır</div>
+          </div>
+          <div class="field-group">
+            <label class="field">
+              <span class="field-label">Mikrofon</span>
+              <select id="deviceSelect" class="field-control"></select>
+            </label>
+            <label class="field">
+              <span class="field-label">Kayıt Formatı</span>
+              <select id="formatSelect" class="field-control"></select>
+            </label>
+            <label class="field slider">
+              <span class="field-label">Gürültü Eşiği</span>
+              <div class="slider-row">
+                <input
+                  type="range"
+                  id="thresholdSlider"
+                  min="-90"
+                  max="0"
+                  value="-50"
+                />
+                <span id="thresholdValue">-50 dB</span>
               </div>
-              <div class="control-options">
-                <label class="field">
-                  <span class="field-label">Mikrofon</span>
-                  <select id="deviceSelect" class="field-control"></select>
-                </label>
-                <label class="field">
-                  <span class="field-label">Kayıt Formatı</span>
-                  <select id="formatSelect" class="field-control"></select>
-                </label>
-                <label class="field slider">
-                  <span class="field-label">Gürültü Eşiği</span>
-                  <div class="slider-row">
-                    <input
-                      type="range"
-                      id="thresholdSlider"
-                      min="-90"
-                      max="0"
-                      value="-50"
-                    />
-                    <span id="thresholdValue">-50 dB</span>
-                  </div>
-                  <small>Belirtilen desibel altındaki sesler otomatik olarak yok sayılır.</small>
-                </label>
-              </div>
-            </div>
-            <button id="recordButton" class="record-button">
-              <span class="button-glow"></span>
-              <span class="button-label">Kaydı Başlat</span>
-            </button>
-            <div class="meta-row">
-              <div class="meter" id="levelMeter" aria-label="Seviye göstergesi">
-                <div class="meter-fill" id="meterFill"></div>
-              </div>
-              <button id="saveButton" class="ghost-button" disabled>
-                Kaydı Dışa Aktar
-              </button>
-            </div>
+              <small>Belirtilen desibel altındaki sesler yok sayılır.</small>
+            </label>
           </div>
         </section>
 
-        <section class="preview-card">
+        <section class="panel record-panel">
+          <div class="timer-display">
+            <span id="timer">00:00:00</span>
+            <small id="timerHint">Kaydı başlatmak için tıklayın</small>
+          </div>
+          <button id="recordButton" class="record-button">
+            <span class="button-glow"></span>
+            <span class="button-label">Kaydı Başlat</span>
+          </button>
+          <div class="meta-row">
+            <div class="meter" id="levelMeter" aria-label="Seviye göstergesi">
+              <div class="meter-fill" id="meterFill"></div>
+            </div>
+            <button id="saveButton" class="ghost-button" disabled>
+              Kaydı Dışa Aktar
+            </button>
+          </div>
+          <div class="error-banner" id="errorMessage"></div>
+        </section>
+
+        <section class="panel preview-panel">
           <h2>Son Kayıt</h2>
           <p class="empty" id="emptyState">
             Henüz kayıt alınmadı. Kaydı bitirdiğinizde burada önizleme görünecek.
           </p>
           <div class="preview-player hidden" id="preview">
-            <div class="preview-header">
+            <div class="preview-meta">
               <div>
                 <h3 id="recordingName">AuraVo-kayit.wav</h3>
-                <span id="recordingSize">0 KB</span>
-              </div>
-              <div class="preview-meta">
                 <span id="recordingFormat">WAV</span>
-                <span id="recordingDuration">00:00</span>
               </div>
               <button id="discardButton" class="icon-button" title="Kaydı temizle">
                 ×
               </button>
             </div>
+            <div class="preview-stats">
+              <span id="recordingDuration">00:00</span>
+              <span id="recordingSize">0 KB</span>
+            </div>
             <audio id="audioPlayer" controls></audio>
           </div>
         </section>
       </main>
-
-      <footer class="app-footer">
-        <span>EaseUS tarzı siyah ve mor temalı deneyim.</span>
-        <span id="errorMessage"></span>
-      </footer>
     </div>
     <script type="module" src="./renderer/index.js"></script>
   </body>
