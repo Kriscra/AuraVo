@@ -29,16 +29,42 @@
       <main class="content">
         <section class="control-card">
           <div class="control-inner">
-            <div class="timer-display">
-              <span id="timer">00:00:00</span>
-              <small id="timerHint">Kaydı başlatmak için tıklayın</small>
+            <div class="recording-overview">
+              <div class="timer-display">
+                <span id="timer">00:00:00</span>
+                <small id="timerHint">Kaydı başlatmak için tıklayın</small>
+              </div>
+              <div class="control-options">
+                <label class="field">
+                  <span class="field-label">Mikrofon</span>
+                  <select id="deviceSelect" class="field-control"></select>
+                </label>
+                <label class="field">
+                  <span class="field-label">Kayıt Formatı</span>
+                  <select id="formatSelect" class="field-control"></select>
+                </label>
+                <label class="field slider">
+                  <span class="field-label">Gürültü Eşiği</span>
+                  <div class="slider-row">
+                    <input
+                      type="range"
+                      id="thresholdSlider"
+                      min="-90"
+                      max="0"
+                      value="-50"
+                    />
+                    <span id="thresholdValue">-50 dB</span>
+                  </div>
+                  <small>Belirtilen desibel altındaki sesler otomatik olarak yok sayılır.</small>
+                </label>
+              </div>
             </div>
             <button id="recordButton" class="record-button">
               <span class="button-glow"></span>
               <span class="button-label">Kaydı Başlat</span>
             </button>
             <div class="meta-row">
-              <div class="meter" id="levelMeter">
+              <div class="meter" id="levelMeter" aria-label="Seviye göstergesi">
                 <div class="meter-fill" id="meterFill"></div>
               </div>
               <button id="saveButton" class="ghost-button" disabled>
@@ -59,6 +85,10 @@
                 <h3 id="recordingName">AuraVo-kayit.wav</h3>
                 <span id="recordingSize">0 KB</span>
               </div>
+              <div class="preview-meta">
+                <span id="recordingFormat">WAV</span>
+                <span id="recordingDuration">00:00</span>
+              </div>
               <button id="discardButton" class="icon-button" title="Kaydı temizle">
                 ×
               </button>
@@ -73,6 +103,6 @@
         <span id="errorMessage"></span>
       </footer>
     </div>
-    <script src="renderer.js"></script>
+    <script type="module" src="./renderer/index.js"></script>
   </body>
 </html>

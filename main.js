@@ -32,14 +32,33 @@ app.on('window-all-closed', () => {
   }
 });
 
-ipcMain.handle('save-audio', async (_event, buffer) => {
+ipcMain.handle('save-audio', async (_event, payload) => {
+  const { buffer, extension = 'wav', suggestedName, mimeType } = payload || {};
+
+  if (!buffer) {
+    return { success: false, error: 'Herhangi bir kayıt verisi iletilmedi.' };
+  }
+
+  const normalizedExtension = extension.replace(/^\./, '').toLowerCase();
+  const defaultFileName = suggestedName || `AuraVo-kayit.${normalizedExtension}`;
+
+  const filters = [
+    {
+      name: `${normalizedExtension.toUpperCase()} Dosyası`,
+      extensions: [normalizedExtension]
+    }
+  ];
+
+  if (mimeType) {
+    filters[0].name = `${normalizedExtension.toUpperCase()} (${mimeType})`;
+  }
+
+  filters.push({ name: 'Tüm Dosyalar', extensions: ['*'] });
+
   const { canceled, filePath } = await dialog.showSaveDialog({
     title: 'Kayıt Dosyasını Kaydet',
-    defaultPath: 'AuraVo-kayit.wav',
-    filters: [
-      { name: 'WAV Audio', extensions: ['wav'] },
-      { name: 'Tüm Dosyalar', extensions: ['*'] }
-    ]
+    defaultPath: defaultFileName,
+    filters
   });
 
   if (canceled || !filePath) {
