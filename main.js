@@ -42,11 +42,64 @@ app.on('activate', () => {
   }
 });
 
+function getSettingsPath() {
+  return path.join(app.getPath('userData'), 'settings.json');
+}
+
+async function readSettings() {
+  const settingsPath = getSettingsPath();
+  try {
+    const content = await fs.promises.readFile(settingsPath, 'utf-8');
+    return JSON.parse(content);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return {};
+    }
+    throw error;
+  }
+}
+
+async function writeSettings(data) {
+  const settingsPath = getSettingsPath();
+  await fs.promises.mkdir(path.dirname(settingsPath), { recursive: true });
+  await fs.promises.writeFile(settingsPath, JSON.stringify(data ?? {}, null, 2), 'utf-8');
+  return true;
+}
+
+ipcMain.handle('settings:read', async () => {
+  try {
+    return await readSettings();
+  } catch (error) {
+    console.error('Settings could not be read', error);
+    return {};
+  }
+});
+
+ipcMain.handle('settings:write', async (_event, payload) => {
+  try {
+    await writeSettings(payload || {});
+    return true;
+  } catch (error) {
+    console.error('Settings could not be saved', error);
+    throw error;
+  }
+});
+
 ipcMain.handle('dialog:select-save-location', async (_event, options) => {
-  const { defaultPath, filters } = options;
+  const { defaultPath, filters, directory, name } = options;
+  let resolvedDefaultPath = defaultPath;
+
+  if (!resolvedDefaultPath) {
+    if (directory && name) {
+      resolvedDefaultPath = path.join(directory, name);
+    } else if (name) {
+      resolvedDefaultPath = name;
+    }
+  }
+
   const result = await dialog.showSaveDialog({
     title: 'Save recording',
-    defaultPath,
+    defaultPath: resolvedDefaultPath,
     filters,
     properties: ['showOverwriteConfirmation']
   });
@@ -89,4 +142,17 @@ ipcMain.handle('dialog:open-audio-file', async () => {
     path: filePath,
     data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
   };
+});
+
+ipcMain.handle('dialog:select-directory', async () => {
+  const result = await dialog.showOpenDialog({
+    title: 'Select directory',
+    properties: ['openDirectory', 'createDirectory']
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+
+  return result.filePaths[0];
 });

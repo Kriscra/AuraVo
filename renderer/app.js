@@ -3,6 +3,9 @@ import { resolveSupportedFormats, findFormat } from './audio/formats.js';
 
 const elements = {
   fileName: document.getElementById('file-name'),
+  saveDirectory: document.getElementById('save-directory'),
+  chooseSaveDirectory: document.getElementById('choose-save-directory'),
+  clearSaveDirectory: document.getElementById('clear-save-directory'),
   format: document.getElementById('format'),
   device: document.getElementById('device'),
   refreshDevices: document.getElementById('refresh-devices'),
@@ -48,9 +51,24 @@ const sessionState = {
   durationTimer: null,
   recordings: [],
   activeFormatId: null,
-  baseName: 'kayıt',
-  availableFormats: []
+  baseName: '',
+  availableFormats: [],
+  saveDirectory: ''
 };
+
+const defaultSettings = {
+  baseName: '',
+  formatId: null,
+  threshold: sessionState.threshold,
+  hold: sessionState.hold,
+  bypassGate: false,
+  saveDirectory: '',
+  deviceId: null
+};
+
+const settingsState = { ...defaultSettings };
+
+const LOCAL_STORAGE_KEY = 'auravo-settings';
 
 function formatDuration(ms) {
   const totalSeconds = Math.max(ms / 1000, 0);
@@ -64,12 +82,64 @@ function formatDuration(ms) {
   return `${minutes}:${seconds}.${tenths}`;
 }
 
+async function readPersistedSettings() {
+  try {
+    if (window.bridge?.loadSettings) {
+      const data = await window.bridge.loadSettings();
+      if (data && typeof data === 'object') {
+        return data;
+      }
+    }
+  } catch (error) {
+    console.error('Ayarlar yüklenemedi', error);
+  }
+
+  if (window.localStorage) {
+    try {
+      const raw = window.localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (raw) {
+        return JSON.parse(raw);
+      }
+    } catch (error) {
+      console.error('Yerel depodaki ayarlar çözümlenemedi', error);
+    }
+  }
+
+  return null;
+}
+
+async function writePersistedSettings(data) {
+  try {
+    if (window.bridge?.saveSettings) {
+      await window.bridge.saveSettings(data);
+    }
+  } catch (error) {
+    console.error('Ayarlar ana işleme kaydedilemedi', error);
+  }
+
+  if (window.localStorage) {
+    try {
+      window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+    } catch (error) {
+      console.error('Ayarlar yerel depoya kaydedilemedi', error);
+    }
+  }
+}
+
 function updateThresholdDisplay() {
   elements.thresholdValue.textContent = `${sessionState.threshold} dB`;
 }
 
 function updateHoldDisplay() {
   elements.holdValue.textContent = `${sessionState.hold} ms`;
+}
+
+function updateSaveDirectoryDisplay() {
+  const value = sessionState.saveDirectory || '';
+  elements.saveDirectory.value = value;
+  elements.saveDirectory.title = value || 'Varsayılan klasör seçilmedi';
+  const recordingActive = elements.start.disabled;
+  elements.clearSaveDirectory.disabled = recordingActive || !sessionState.saveDirectory;
 }
 
 function updateLevel(db) {
@@ -95,6 +165,65 @@ function updateGateIndicator(isOpen) {
     elements.gateIndicator.classList.remove('open');
     elements.gateIndicator.textContent = 'Kapı Kapalı';
   }
+}
+
+function getCurrentSettingsPayload() {
+  return {
+    baseName: sessionState.baseName,
+    formatId: elements.format.value || null,
+    threshold: sessionState.threshold,
+    hold: sessionState.hold,
+    bypassGate: sessionState.bypassGate,
+    saveDirectory: sessionState.saveDirectory || '',
+    deviceId: elements.device.value || null
+  };
+}
+
+let settingsSaveTimer = null;
+
+function queueSettingsSave() {
+  if (settingsSaveTimer) {
+    clearTimeout(settingsSaveTimer);
+  }
+
+  const payload = getCurrentSettingsPayload();
+  Object.assign(settingsState, payload);
+
+  settingsSaveTimer = setTimeout(() => {
+    settingsSaveTimer = null;
+    writePersistedSettings(payload);
+  }, 250);
+}
+
+async function initializeSettings() {
+  const persisted = await readPersistedSettings();
+  if (persisted && typeof persisted === 'object') {
+    Object.assign(settingsState, defaultSettings, persisted);
+  } else {
+    Object.assign(settingsState, defaultSettings);
+  }
+
+  sessionState.baseName = settingsState.baseName || '';
+  elements.fileName.value = sessionState.baseName;
+
+  if (Number.isFinite(settingsState.threshold)) {
+    sessionState.threshold = settingsState.threshold;
+    elements.threshold.value = sessionState.threshold;
+  }
+
+  if (Number.isFinite(settingsState.hold)) {
+    sessionState.hold = settingsState.hold;
+    elements.hold.value = sessionState.hold;
+  }
+
+  sessionState.bypassGate = Boolean(settingsState.bypassGate);
+  elements.captureSilence.checked = sessionState.bypassGate;
+
+  sessionState.saveDirectory = settingsState.saveDirectory || '';
+  updateSaveDirectoryDisplay();
+
+  updateThresholdDisplay();
+  updateHoldDisplay();
 }
 
 function startDurationTimer() {
@@ -128,6 +257,13 @@ function setRecordingUI(active) {
   elements.format.disabled = active;
   elements.device.disabled = active;
   elements.refreshDevices.disabled = active;
+  elements.fileName.disabled = active;
+  elements.chooseSaveDirectory.disabled = active;
+  if (active) {
+    elements.clearSaveDirectory.disabled = true;
+  } else {
+    elements.clearSaveDirectory.disabled = !sessionState.saveDirectory;
+  }
 }
 
 async function populateFormats() {
@@ -144,7 +280,14 @@ async function populateFormats() {
     elements.format.appendChild(option);
   }
   if (supported.length > 0) {
-    elements.format.value = supported[0].id;
+    const preferred = settingsState.formatId;
+    if (preferred && supported.some((format) => format.id === preferred)) {
+      elements.format.value = preferred;
+      settingsState.formatId = preferred;
+    } else {
+      elements.format.value = supported[0].id;
+      settingsState.formatId = elements.format.value;
+    }
   }
 }
 
@@ -168,6 +311,7 @@ async function populateDevices() {
     option.textContent = 'Cihaz bulunamadı';
     elements.device.appendChild(option);
     elements.device.disabled = true;
+    settingsState.deviceId = null;
     return;
   }
 
@@ -179,6 +323,17 @@ async function populateDevices() {
   }
 
   elements.device.disabled = false;
+
+  if (devices.length > 0) {
+    const preferredDevice = settingsState.deviceId;
+    if (preferredDevice && devices.some((device) => device.deviceId === preferredDevice)) {
+      elements.device.value = preferredDevice;
+    }
+    if (!elements.device.value) {
+      elements.device.value = devices[0].deviceId;
+    }
+    settingsState.deviceId = elements.device.value || null;
+  }
 }
 
 function buildRecordingItem(recording) {
@@ -246,12 +401,21 @@ async function exportRecording(recording) {
       return;
     }
 
-    const defaultPath = `${recording.name}.${recording.extension}`;
+    const defaultName = `${recording.name}.${recording.extension}`;
     const filters = [
       { name: 'Audio', extensions: [recording.extension] },
       { name: 'Tüm Dosyalar', extensions: ['*'] }
     ];
-    const filePath = await window.bridge.chooseSaveLocation(defaultPath, filters);
+    const saveOptions = {
+      name: defaultName,
+      filters
+    };
+
+    if (sessionState.saveDirectory) {
+      saveOptions.directory = sessionState.saveDirectory;
+    }
+
+    const filePath = await window.bridge.chooseSaveLocation(saveOptions);
     if (!filePath) {
       return;
     }
@@ -317,6 +481,35 @@ async function importRecording() {
   }
 }
 
+async function chooseSaveDirectory() {
+  if (!window.bridge?.pickDirectory) {
+    alert('Klasör seçimi bu ortamda desteklenmiyor.');
+    return;
+  }
+
+  try {
+    const directory = await window.bridge.pickDirectory();
+    if (!directory) {
+      return;
+    }
+
+    sessionState.saveDirectory = directory;
+    updateSaveDirectoryDisplay();
+    queueSettingsSave();
+  } catch (error) {
+    console.error('Klasör seçimi başarısız oldu', error);
+  }
+}
+
+function clearSaveDirectory() {
+  if (!sessionState.saveDirectory) {
+    return;
+  }
+  sessionState.saveDirectory = '';
+  updateSaveDirectoryDisplay();
+  queueSettingsSave();
+}
+
 async function startRecording() {
   try {
     setRecordingUI(true);
@@ -325,7 +518,7 @@ async function startRecording() {
 
     sessionState.activeFormatId = elements.format.value;
     const rawName = (elements.fileName.value || '').trim();
-    sessionState.baseName = rawName.length > 0 ? rawName : 'kayıt';
+    sessionState.baseName = rawName;
     updateGateIndicator(sessionState.bypassGate);
 
     await recorder.start({
@@ -376,6 +569,11 @@ async function stopRecording() {
 }
 
 function initializeEvents() {
+  elements.fileName.addEventListener('input', (event) => {
+    sessionState.baseName = event.target.value.trim();
+    queueSettingsSave();
+  });
+
   elements.threshold.addEventListener('input', (event) => {
     sessionState.threshold = Number(event.target.value);
     updateThresholdDisplay();
@@ -384,6 +582,7 @@ function initializeEvents() {
       hold: sessionState.hold,
       bypassGate: sessionState.bypassGate
     });
+    queueSettingsSave();
   });
 
   elements.hold.addEventListener('input', (event) => {
@@ -394,6 +593,7 @@ function initializeEvents() {
       hold: sessionState.hold,
       bypassGate: sessionState.bypassGate
     });
+    queueSettingsSave();
   });
 
   elements.captureSilence.addEventListener('change', (event) => {
@@ -404,6 +604,17 @@ function initializeEvents() {
       bypassGate: sessionState.bypassGate
     });
     updateGateIndicator(sessionState.bypassGate);
+    queueSettingsSave();
+  });
+
+  elements.format.addEventListener('change', () => {
+    settingsState.formatId = elements.format.value || null;
+    queueSettingsSave();
+  });
+
+  elements.device.addEventListener('change', () => {
+    settingsState.deviceId = elements.device.value || null;
+    queueSettingsSave();
   });
 
   elements.start.addEventListener('click', startRecording);
@@ -412,11 +623,12 @@ function initializeEvents() {
     await populateDevices();
   });
   elements.importButton.addEventListener('click', importRecording);
+  elements.chooseSaveDirectory.addEventListener('click', chooseSaveDirectory);
+  elements.clearSaveDirectory.addEventListener('click', clearSaveDirectory);
 }
 
 async function init() {
-  updateThresholdDisplay();
-  updateHoldDisplay();
+  await initializeSettings();
   updateLevel(-Infinity);
   updateGateIndicator(false);
   setRecordingUI(false);
