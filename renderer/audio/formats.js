@@ -1,59 +1,64 @@
-const FORMAT_CATALOG = [
+const FORMAT_DEFINITIONS = [
   {
-    id: 'webm',
-    label: 'WebM (Opus)',
-    extension: 'webm',
-    exportMimeType: 'audio/webm',
-    recorderMimeTypes: ['audio/webm;codecs=opus', 'audio/webm'],
-    requiresConversion: false
-  },
-  {
-    id: 'ogg',
-    label: 'Ogg (Opus)',
-    extension: 'ogg',
-    exportMimeType: 'audio/ogg',
-    recorderMimeTypes: ['audio/ogg;codecs=opus', 'audio/ogg'],
-    requiresConversion: false
-  },
-  {
-    id: 'wav',
+    id: 'wav-pcm',
     label: 'WAV (PCM 16-bit)',
+    type: 'pcm',
     extension: 'wav',
-    exportMimeType: 'audio/wav',
-    recorderMimeTypes: ['audio/webm;codecs=opus', 'audio/webm'],
-    requiresConversion: true
+    description: 'Tüm platformlarda desteklenen 16-bit PCM çıktı'
+  },
+  {
+    id: 'webm-opus',
+    label: 'WebM (Opus)',
+    type: 'native',
+    mimeType: 'audio/webm;codecs=opus',
+    extension: 'webm',
+    description: 'Chromium tabanlı ortamlarda yüksek verimli kayıt'
+  },
+  {
+    id: 'ogg-opus',
+    label: 'Ogg (Opus)',
+    type: 'native',
+    mimeType: 'audio/ogg;codecs=opus',
+    extension: 'ogg',
+    description: 'Mozilla tabanlı ortamlarda yaygın destek'
+  },
+  {
+    id: 'mp3-native',
+    label: 'MP3 (Deneysel)',
+    type: 'native',
+    mimeType: 'audio/mpeg',
+    extension: 'mp3',
+    description: 'Platform destekliyorsa yerel MediaRecorder ile MP3'
   }
 ];
 
-function resolveRecorderMimeType(recorderMimeTypes = []) {
+export function getAllFormats() {
+  return [...FORMAT_DEFINITIONS];
+}
+
+export function resolveSupportedFormats() {
   if (typeof MediaRecorder === 'undefined') {
-    return undefined;
+    return FORMAT_DEFINITIONS.filter((format) => format.type === 'pcm');
   }
 
-  return recorderMimeTypes.find((mimeType) => {
+  return FORMAT_DEFINITIONS.filter((format) => {
+    if (format.type === 'pcm') {
+      return true;
+    }
+
+    if (!format.mimeType) {
+      return false;
+    }
+
     try {
-      return MediaRecorder.isTypeSupported(mimeType);
+      return MediaRecorder.isTypeSupported(format.mimeType);
     } catch (error) {
-      console.warn('MediaRecorder desteği sorgulanamadı:', error);
+      console.warn('MediaRecorder desteği doğrulanamadı:', error);
       return false;
     }
   });
 }
 
-export function getSupportedFormats() {
-  return FORMAT_CATALOG.map((format) => {
-    const recorderMimeType = resolveRecorderMimeType(format.recorderMimeTypes);
-    if (format.recorderMimeTypes?.length && !recorderMimeType) {
-      return null;
-    }
-
-    return {
-      ...format,
-      recorderMimeType
-    };
-  }).filter(Boolean);
-}
-
-export function getFormatById(formats, id) {
-  return formats.find((format) => format.id === id) ?? formats[0];
+export function findFormat(id) {
+  return FORMAT_DEFINITIONS.find((format) => format.id === id);
 }

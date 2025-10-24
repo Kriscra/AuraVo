@@ -1,7 +1,7 @@
 {
-  "name": "auravo",
+  "name": "auravo-recorder",
   "version": "1.0.0",
-  "description": "EaseUS inspired desktop audio recorder built with Electron",
+  "description": "Electron-based desktop audio recorder with advanced gating and multi-format export",
   "main": "main.js",
   "scripts": {
     "start": "electron ."

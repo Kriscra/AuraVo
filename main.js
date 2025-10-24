@@ -1,52 +1,34 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
-const path = require('path');
 const fs = require('fs');
+const path = require('path');
 
-const createWindow = () => {
+const isDev = process.env.NODE_ENV === 'development';
+
+function createWindow() {
   const win = new BrowserWindow({
-    width: 900,
-    height: 620,
-    backgroundColor: '#08070d',
-    autoHideMenuBar: true,
-    frame: false,
-    resizable: false,
-    maximizable: false,
-    fullscreenable: false,
+    width: 1100,
+    height: 720,
+    minWidth: 900,
+    minHeight: 600,
+    backgroundColor: '#0f0f10',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false
     }
   });
+
+  win.removeMenu();
 
   win.loadFile('index.html');
-};
 
-app.whenReady().then(() => {
-  createWindow();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
-});
-
-ipcMain.on('window-control', (event, action) => {
-  const targetWindow = BrowserWindow.fromWebContents(event.sender);
-  if (!targetWindow) {
-    return;
+  if (isDev) {
+    win.webContents.openDevTools({ mode: 'detach' });
   }
+}
 
-  switch (action) {
-    case 'minimize':
-      targetWindow.minimize();
-      break;
-    case 'close':
-      targetWindow.close();
-      break;
-    default:
-      break;
-  }
-});
+app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -54,43 +36,57 @@ app.on('window-all-closed', () => {
   }
 });
 
-ipcMain.handle('save-audio', async (_event, payload) => {
-  const { buffer, extension = 'wav', suggestedName, mimeType } = payload || {};
-
-  if (!buffer) {
-    return { success: false, error: 'Herhangi bir kayıt verisi iletilmedi.' };
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
   }
+});
 
-  const normalizedExtension = extension.replace(/^\./, '').toLowerCase();
-  const defaultFileName = suggestedName || `AuraVo-kayit.${normalizedExtension}`;
-
-  const filters = [
-    {
-      name: `${normalizedExtension.toUpperCase()} Dosyası`,
-      extensions: [normalizedExtension]
-    }
-  ];
-
-  if (mimeType) {
-    filters[0].name = `${normalizedExtension.toUpperCase()} (${mimeType})`;
-  }
-
-  filters.push({ name: 'Tüm Dosyalar', extensions: ['*'] });
-
-  const { canceled, filePath } = await dialog.showSaveDialog({
-    title: 'Kayıt Dosyasını Kaydet',
-    defaultPath: defaultFileName,
-    filters
+ipcMain.handle('dialog:select-save-location', async (_event, options) => {
+  const { defaultPath, filters } = options;
+  const result = await dialog.showSaveDialog({
+    title: 'Save recording',
+    defaultPath,
+    filters,
+    properties: ['showOverwriteConfirmation']
   });
 
-  if (canceled || !filePath) {
-    return { success: false };
+  if (result.canceled) {
+    return null;
   }
 
-  try {
-    await fs.promises.writeFile(filePath, Buffer.from(buffer));
-    return { success: true, filePath };
-  } catch (error) {
-    return { success: false, error: error.message };
+  return result.filePath;
+});
+
+ipcMain.handle('file:write', async (_event, payload) => {
+  const { filePath, data } = payload;
+  if (!filePath) {
+    throw new Error('No file path provided');
   }
+
+  const buffer = Buffer.from(data);
+  await fs.promises.writeFile(filePath, buffer);
+  return true;
+});
+
+ipcMain.handle('dialog:open-audio-file', async () => {
+  const result = await dialog.showOpenDialog({
+    title: 'Import audio file',
+    properties: ['openFile'],
+    filters: [
+      { name: 'Audio', extensions: ['mp3', 'wav', 'ogg', 'webm', 'flac', 'm4a', 'aac'] }
+    ]
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+
+  const filePath = result.filePaths[0];
+  const data = await fs.promises.readFile(filePath);
+  return {
+    name: path.basename(filePath),
+    path: filePath,
+    data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
+  };
 });
