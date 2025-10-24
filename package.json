@@ -1,0 +1,14 @@
+{
+  "name": "auravo-recorder",
+  "version": "1.0.0",
+  "description": "Electron-based desktop audio recorder with advanced gating and multi-format export",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "28.2.0"
+  }
+}

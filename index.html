@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AuraVo Recorder</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>AuraVo Recorder</h1>
+        <p class="subtitle">Gelişmiş gürültü kapısı ve çoklu format desteği ile masaüstü kayıt</p>
+      </div>
+      <button id="import-audio" class="secondary">Kayıt Arşivine Dosya Ekle</button>
+    </header>
+
+    <main class="layout">
+      <section class="panel controls">
+        <h2>Oturum</h2>
+        <div class="field">
+          <label for="file-name">Dosya adı</label>
+          <input id="file-name" type="text" placeholder="kayıt" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="save-directory">Varsayılan kayıt klasörü</label>
+          <div class="input-row">
+            <input id="save-directory" type="text" placeholder="Seçilmedi" readonly />
+            <button id="choose-save-directory" class="secondary">Seç</button>
+            <button id="clear-save-directory" class="secondary">Temizle</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="format">Format</label>
+          <select id="format"></select>
+        </div>
+        <div class="field">
+          <label for="device">Mikrofon</label>
+          <div class="input-row">
+            <select id="device"></select>
+            <button id="refresh-devices" class="secondary">Yenile</button>
+          </div>
+        </div>
+        <div class="field slider">
+          <label for="threshold">Gürültü eşiği</label>
+          <input id="threshold" type="range" min="-90" max="-10" step="1" value="-45" />
+          <output id="threshold-value">-45 dB</output>
+        </div>
+        <div class="field slider">
+          <label for="hold">Gürültü bekletme</label>
+          <input id="hold" type="range" min="0" max="2000" step="50" value="300" />
+          <output id="hold-value">300 ms</output>
+        </div>
+        <div class="toggles">
+          <label class="toggle">
+            <input type="checkbox" id="capture-silence" />
+            <span>Daimi kayıt (gürültü kapısını devre dışı bırak)</span>
+          </label>
+        </div>
+        <div class="status">
+          <div class="level">
+            <span>Seviye</span>
+            <div class="meter" id="level-meter">
+              <div class="bar" id="level-bar"></div>
+            </div>
+            <span id="level-value">-∞ dB</span>
+          </div>
+          <div class="gate" id="gate-indicator">Kapı Kapalı</div>
+          <div class="duration" id="duration">00:00.0</div>
+        </div>
+        <div class="actions">
+          <button id="start">Kaydı Başlat</button>
+          <button id="stop" class="destructive" disabled>Kaydı Bitir</button>
+        </div>
+      </section>
+
+      <section class="panel library">
+        <h2>Kayıt Arşivi</h2>
+        <p class="hint">Kayıtları dinle, dışa aktar ve not ekle.</p>
+        <ul id="recording-list" class="recording-list"></ul>
+      </section>
+    </main>
+
+    <template id="recording-template">
+      <li class="recording-item">
+        <div class="summary">
+          <strong class="name"></strong>
+          <span class="meta format"></span>
+          <span class="meta duration"></span>
+          <span class="meta size"></span>
+        </div>
+        <audio controls preload="metadata"></audio>
+        <div class="item-actions">
+          <button class="secondary save">Dışa aktar</button>
+          <button class="secondary rename">Yeniden adlandır</button>
+          <button class="destructive remove">Sil</button>
+        </div>
+        <textarea class="notes" rows="2" placeholder="Not ekle..."></textarea>
+      </li>
+    </template>
+
+    <script type="module" src="renderer/app.js"></script>
+  </body>
+</html>
